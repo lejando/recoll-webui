@@ -38,6 +38,7 @@ DEFAULTS = {
     'maxchars': 500,
     'maxresults': 0,
     'perpage': 25,
+    'csvfields': 'filename title author size time mtype url',
 }
 
 # sort fields/labels
@@ -105,12 +106,18 @@ def get_config():
     # get useful things from recoll.conf
     rclconf = rclconfig.RclConfig()
     config['confdir'] = rclconf.getConfDir()
-    config['dirs'] = shlex.split(rclconf.getConfParam('topdirs'))
+    config['dirs'] = [os.path.expanduser(d) for d in
+                      shlex.split(rclconf.getConfParam('topdirs'))]
     config['stemlang'] = rclconf.getConfParam('indexstemminglanguages')
     # get config from cookies or defaults
     for k, v in DEFAULTS.items():
         value = select([bottle.request.get_cookie(k), v])
         config[k] = type(v)(value)
+    # Fix csvfields: get rid of invalid ones to avoid needing tests in the dump function
+    cf = config['csvfields'].split()
+    ncf = [f for f in cf if f in FIELDS]
+    config['csvfields'] = ' '.join(ncf)
+    config['fields'] = ' '.join(FIELDS)
     # get mountpoints
     config['mounts'] = {}
     for d in config['dirs']:
@@ -175,7 +182,7 @@ class HlMeths:
         return '</span>'
 #}}}
 #{{{ recoll_search
-def recoll_search(q):
+def recoll_search(q, dosnippets=True):
     config = get_config()
     tstart = datetime.datetime.now()
     results = []
@@ -213,7 +220,8 @@ def recoll_search(q):
         d['label'] = select([d['title'], d['filename'], '?'], [None, ''])
         d['sha'] = hashlib.sha1(d['url']+d['ipath']).hexdigest()
         d['time'] = timestr(d['mtime'], config['timefmt'])
-        d['snippet'] = query.makedocabstract(doc, highlighter).encode('utf-8')
+        if dosnippets:
+            d['snippet'] = query.makedocabstract(doc, highlighter).encode('utf-8')
         results.append(d)
     tend = datetime.datetime.now()
     return results, nres, tend - tstart
@@ -296,6 +304,7 @@ def edit(resnum):
     bottle.response.headers['Content-Disposition'] = \
         'attachment; filename="%s"' % os.path.basename(path).encode('utf-8')
     path = path.encode('utf-8')
+    bottle.response.headers['Content-Length'] = os.stat(path).st_size
     f = open(path, 'r')
     if pathismine:
         os.unlink(path)
@@ -316,18 +325,20 @@ def get_json():
 #{{{ csv
 @bottle.route('/csv')
 def get_csv():
+    config = get_config()
     query = get_query()
     query['page'] = 0
     qs = query_to_recoll_string(query)
     bottle.response.headers['Content-Type'] = 'text/csv'
     bottle.response.headers['Content-Disposition'] = 'attachment; filename=recoll-%s.csv' % normalise_filename(qs)
-    res, nres, timer = recoll_search(query)
+    res, nres, timer = recoll_search(query, False)
     si = StringIO.StringIO()
     cw = csv.writer(si)
-    cw.writerow(FIELDS)
+    fields = config['csvfields'].split()
+    cw.writerow(fields)
     for doc in res:
         row = []
-        for f in FIELDS:
+        for f in fields:
             row.append(doc[f])
         cw.writerow(row)
     return si.getvalue().strip("\r\n")
@@ -342,10 +353,10 @@ def settings():
 def set():
     config = get_config()
     for k, v in DEFAULTS.items():
-        bottle.response.set_cookie(k, str(bottle.request.query.get(k)), max_age=3153600000)
+        bottle.response.set_cookie(k, str(bottle.request.query.get(k)), max_age=3153600000, expires=315360000)
     for d in config['dirs']:
         cookie_name = 'mount_%s' % urllib.quote(d, '')
-        bottle.response.set_cookie(cookie_name, str(bottle.request.query.get('mount_%s' % d)), max_age=3153600000)
+        bottle.response.set_cookie(cookie_name, str(bottle.request.query.get('mount_%s' % d)), max_age=3153600000, expires=315360000)
     bottle.redirect('./')
 #}}}
 #{{{ osd
@@ -358,3 +369,4 @@ def main():
     return {'url': url}
 #}}}
 # vim: fdm=marker:tw=80:ts=4:sw=4:sts=4:et
+
