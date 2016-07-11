@@ -16,11 +16,11 @@
         <div class="search-result-author">{{d['author']}}</div>
     %end
     <div class="search-result-url">
-        %urllabel = os.path.dirname(d['url'].replace('file://', ''))
+        %urllabel = url
         %for r in config['dirs']:
             %urllabel = urllabel.replace(r.rsplit('/',1)[0] + '/' , '')
         %end
-        <a href="{{os.path.dirname(url)}}">{{urllabel}}</a>
+        <a href="{{url}}">{{urllabel}}</a>
     </div>
 %if hasrclextract:
     <div class="search-result-links">
