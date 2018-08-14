@@ -39,7 +39,7 @@ DEFAULTS = {
     'maxresults': 0,
     'perpage': 25,
     'csvfields': 'filename title author size time mtype url',
-    'title_link': 'download',
+    'title_link': 'open',
 }
 
 # sort fields/labels
@@ -123,7 +123,8 @@ def get_config():
     config['mounts'] = {}
     for d in config['dirs']:
         name = 'mount_%s' % urllib.quote(d,'')
-        config['mounts'][d] = select([bottle.request.get_cookie(name), 'file://%s' % d], [None, ''])
+        config['mounts'][d] = 'http://ntserver/start-page/normen'
+		# select([bottle.request.get_cookie(name), 'file://%s' % d], [None, ''])
     return config
 #}}}
 #{{{ get_dirs
